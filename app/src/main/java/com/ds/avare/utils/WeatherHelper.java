@@ -23,23 +23,26 @@ public class WeatherHelper {
      * @return
      */
     public static int metarColor(String type) {
+        int ColorValue;
         if(type.equals("VFR")) {
         	//green
-            return(0xff52a013);
+            ColorValue=(0xff52a013);
         }
         else if(type.equals("IFR")) {
         	// red
-            return(0xffff2a00);                        
+            ColorValue=(0xffff2a00);
         }
         else if(type.equals("MVFR")) {
         	// blue
-            return(0xff3b3bf7);
+            ColorValue=(0xff3b3bf7);
         }
         else if(type.equals("LIFR")) {
         	// magenta
-            return(0xffff54f9);                       
+            ColorValue=(0xffff54f9);
+        } else {
+            ColorValue=(0xffffffff);
         }
-        return(0xffffffff);
+        return ColorValue;
     }
     
     /**

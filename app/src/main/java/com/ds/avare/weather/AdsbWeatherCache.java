@@ -24,8 +24,11 @@ import com.ds.avare.position.Origin;
 import com.ds.avare.shapes.DrawingContext;
 import com.ds.avare.storage.DataSource;
 import com.ds.avare.storage.Preferences;
+import com.ds.avare.utils.BitmapHolder;
+import com.ds.avare.utils.DisplayUatTowerIcon;
 import com.ds.avare.utils.RateLimitedBackgroundQueue;
 import com.ds.avare.utils.WeatherHelper;
+import com.ds.avare.utils.UatTowerQueue;
 
 import java.sql.Date;
 import java.text.SimpleDateFormat;
@@ -49,8 +52,11 @@ public class AdsbWeatherCache {
     private HashMap<String, WindsAloft> mWinds;
     private NexradImage mNexrad;
     private NexradImageConus mNexradConus;
+    private HashMap<String, UatTower> mUatTower;
     private static Preferences mPref;
     private RateLimitedBackgroundQueue mMetarQueue;
+    private UatTowerQueue mUatTowerQueue;
+    private static BitmapHolder mUatTowerBitmap;
 
     /**
      * 
@@ -59,11 +65,14 @@ public class AdsbWeatherCache {
         mPref = new Preferences(context);
         mTaf = new HashMap<String, Taf>();
         mMetar = new HashMap<String, Metar>();
+        mUatTower = new HashMap<String, UatTower>();
         mAirep = new HashMap<String, Airep>();
         mWinds = new HashMap<String, WindsAloft>();
         mNexrad = new NexradImage();
         mMetarQueue = new RateLimitedBackgroundQueue(service);
+        mUatTowerQueue = new UatTowerQueue(service);
         mNexradConus = new NexradImageConus();
+        mUatTowerBitmap = DisplayUatTowerIcon.DisplayUatTowerIcon(context);
     }
 
     /**
@@ -106,7 +115,15 @@ public class AdsbWeatherCache {
         mMetarQueue.insertMetarInQueue(m); // This will slowly make a metar map
     }
 
-
+    public void putUatTower(long time, double lon, double lat, int tisid)
+    {
+        UatTower u = new UatTower();
+        u.timestamp = System.currentTimeMillis();
+        u.lat = lat;
+        u.lon = lon;
+        mUatTower.put(String.valueOf(tisid), u);
+        mUatTowerQueue.insertUatTowerInQueue(u);
+    }
     /*
  * Determine if shape belong to a screen based on Screen longitude and latitude
  * and shape max/min longitude latitude
@@ -123,6 +140,35 @@ public class AdsbWeatherCache {
         return isInLat && isInLon;
     }
 
+    /**
+     * Draw UAT ADS-B towers
+     * @param ctx
+     * @param map
+     * @param shouldDraw
+     */
+
+    public static void drawUATTowers(DrawingContext ctx, HashMap<String, UatTower> map, boolean shouldDraw) {
+        if(0 == ctx.pref.showLayer() || (!shouldDraw) || (!ctx.pref.useAdsbWeather())) {
+            // This shows only for metar layer, and when adsb is used
+            return;
+        }
+
+        Set<String> keys = map.keySet();
+        for(String key : keys) {
+            UatTower m = map.get(key);
+            if(!isOnScreen(ctx.origin, m.lat, m.lon)) {
+                continue;
+            }
+                float x = (float)ctx.origin.getOffsetX(m.lon);
+                float y = (float)ctx.origin.getOffsetY(m.lat);
+                float x1 = x - mUatTowerBitmap.getWidth()/2;
+                float y1 = y - mUatTowerBitmap.getHeight()/2;
+                ctx.canvas.drawBitmap(mUatTowerBitmap.getBitmap(),x1,y1,ctx.paint);
+            /*
+            */
+            ctx.paint.setAlpha(255);
+        }
+    }
     /**
      * Draw metar map from ADSB
      * @param ctx
@@ -146,8 +192,11 @@ public class AdsbWeatherCache {
             String text = m.flightCategory;
             if (mPref.isShowLabelMETARS())
             {
-                ctx.service.getShadowedText().drawAlpha(ctx.canvas, ctx.textPaint,
-                        text, WeatherHelper.metarColor(m.flightCategory), (float)x, (float)y /* + ctx.textPaint.getTextSize()*/,255);
+                // Do not draw unknown metars
+                if (WeatherHelper.metarColor(m.flightCategory) != 0xffffffff) {
+                    ctx.service.getShadowedText().drawAlpha(ctx.canvas, ctx.textPaint,
+                            text, WeatherHelper.metarColor(m.flightCategory), (float) x, (float) y, ctx.pref.showLayer());
+                }
             }
             else
             {
@@ -171,7 +220,9 @@ public class AdsbWeatherCache {
     public HashMap<String, Metar> getAllMetars() {
         return mMetar;
     }
-
+    public HashMap<String, UatTower> getAllUatTowers() {
+        return mUatTower;
+    }
     /**
      * 
      * @param time
